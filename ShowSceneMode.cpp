@@ -19,7 +19,7 @@ ShowSceneMode::ShowSceneMode(Scene const &scene_) : scene(scene_) {
 ShowSceneMode::~ShowSceneMode() {
 }
 
-bool ShowSceneMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
+bool ShowSceneMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size, SDL_Window *window) {
 	//----- trackball-style camera controls -----
 	if (evt.type == SDL_MOUSEBUTTONDOWN) {
 		if (evt.button.button == SDL_BUTTON_LEFT) {

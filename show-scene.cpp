@@ -173,7 +173,7 @@ int main(int argc, char **argv) {
 					on_resize();
 				}
 				//handle input:
-				if (Mode::current && Mode::current->handle_event(evt, window_size)) {
+				if (Mode::current && Mode::current->handle_event(evt, window_size, window)) {
 					// mode handled it; great
 				} else if (evt.type == SDL_QUIT) {
 					Mode::set_current(nullptr);

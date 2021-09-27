@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 	SDL_Window *window = SDL_CreateWindow(
 		"gp21 game3: require sound", //TODO: remember to set a title for your game!
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-		1280, 720, //TODO: modify window size if you'd like
+		1920, 1080, //TODO: modify window size if you'd like
 		SDL_WINDOW_OPENGL
 		| SDL_WINDOW_RESIZABLE //uncomment to allow resizing
 		| SDL_WINDOW_ALLOW_HIGHDPI //uncomment for full resolution on high-DPI screens
@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
 					on_resize();
 				}
 				//handle input:
-				if (Mode::current && Mode::current->handle_event(evt, window_size)) {
+				if (Mode::current && Mode::current->handle_event(evt, window_size, window)) {
 					// mode handled it; great
 				} else if (evt.type == SDL_QUIT) {
 					Mode::set_current(nullptr);

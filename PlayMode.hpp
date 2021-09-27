@@ -7,13 +7,17 @@
 
 #include <vector>
 #include <deque>
+#include <string>
+#include <iostream>
+#include <stdlib.h>
+#include <cmath>
 
 struct PlayMode : Mode {
 	PlayMode();
 	virtual ~PlayMode();
 
 	//functions called by main loop:
-	virtual bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
+	virtual bool handle_event(SDL_Event const &, glm::uvec2 const &window_size, SDL_Window *window) override;
 	virtual void update(float elapsed) override;
 	virtual void draw(glm::uvec2 const &drawable_size) override;
 
@@ -28,16 +32,35 @@ struct PlayMode : Mode {
 	//local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
 
-	//hexapod leg to wobble:
-	Scene::Transform *hip = nullptr;
-	Scene::Transform *upper_leg = nullptr;
-	Scene::Transform *lower_leg = nullptr;
-	glm::quat hip_base_rotation;
-	glm::quat upper_leg_base_rotation;
-	glm::quat lower_leg_base_rotation;
-	float wobble = 0.0f;
+	//transform
+	Scene::Transform *cat;
+	Scene::Transform *rat;
+	
+	struct Food{
+		glm::vec3 position;
+		float size;
+		float life = 100.0;
+		std::vector<Scene::Transform*> target;
+	};
 
-	glm::vec3 get_leg_tip_position();
+	Food food[5];
+
+	//radius
+	glm::vec2 table_size = glm::vec2(35.0f, 20.0f);
+	float rat_size = 3.0f;
+	float block_size = 5.0f;
+
+	//Game status
+	int numFood = 5;
+	Food* target = nullptr;
+	bool tryEating = false;
+	bool isCatched = false;
+
+	//Cat status
+	int checkStatus = 0;
+	float checkTimer = 5.0f;
+	float angle = 0;
+
 
 	//music coming from the tip of the leg (as a demonstration):
 	std::shared_ptr< Sound::PlayingSample > leg_tip_loop;
@@ -45,4 +68,6 @@ struct PlayMode : Mode {
 	//camera:
 	Scene::Camera *camera = nullptr;
 
+	//textUI
+	std::string status;
 };

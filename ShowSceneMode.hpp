@@ -15,7 +15,7 @@ struct ShowSceneMode : Mode {
 	ShowSceneMode(Scene const &scene);
 	virtual ~ShowSceneMode();
 
-	virtual bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
+	virtual bool handle_event(SDL_Event const &, glm::uvec2 const &window_size, SDL_Window* window) override;
 	virtual void draw(glm::uvec2 const &drawable_size) override;
 
 	//z-up trackball-style camera controls:

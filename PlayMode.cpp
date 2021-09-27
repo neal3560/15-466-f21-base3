@@ -36,24 +36,78 @@ Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
 	});
 });
 
+GLuint brunch_meshes_for_lit_color_texture_program = 0;
+Load< MeshBuffer > brunch_meshes(LoadTagDefault, []() -> MeshBuffer const* {
+	MeshBuffer const* ret = new MeshBuffer(data_path("brunch.pnct"));
+	brunch_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
+	return ret;
+});
+
+Load< Scene > brunch_scene(LoadTagDefault, []() -> Scene const* {
+	return new Scene(data_path("brunch.scene"), [&](Scene& scene, Scene::Transform* transform, std::string const& mesh_name) {
+		Mesh const& mesh = brunch_meshes->lookup(mesh_name);
+
+		scene.drawables.emplace_back(transform);
+		Scene::Drawable& drawable = scene.drawables.back();
+
+		drawable.pipeline = lit_color_texture_program_pipeline;
+
+		drawable.pipeline.vao = brunch_meshes_for_lit_color_texture_program;
+		drawable.pipeline.type = mesh.type;
+		drawable.pipeline.start = mesh.start;
+		drawable.pipeline.count = mesh.count;
+
+	});
+});
+
 Load< Sound::Sample > dusty_floor_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("dusty-floor.opus"));
 });
 
-PlayMode::PlayMode() : scene(*hexapod_scene) {
+PlayMode::PlayMode() : scene(*brunch_scene) {
 	//get pointers to leg for convenience:
 	for (auto &transform : scene.transforms) {
-		if (transform.name == "Hip.FL") hip = &transform;
-		else if (transform.name == "UpperLeg.FL") upper_leg = &transform;
-		else if (transform.name == "LowerLeg.FL") lower_leg = &transform;
+		if (transform.name == "Cat") cat = &transform;
+		else if (transform.name == "Rat") rat = &transform;
+		else if (transform.name == "cake") {
+			food[0].position = transform.position;
+			food[0].size = 5.0f;
+			food[0].target.push_back(&transform);
+		} 
+		else if (transform.name == "pancakes") {
+			food[1].position = transform.position;
+			food[1].size = 10.0f;
+			food[1].target.push_back(&transform);
+		}
+		else if (transform.name == "sandwich") {
+			food[2].position = transform.position;
+			food[2].size = 10.0f;
+			food[2].target.push_back(&transform);
+		}
+		else if (transform.name == "bacon") {
+			food[3].position = transform.position;
+			food[3].size = 10.0f;
+			food[3].target.push_back(&transform);
+		}
+		else if (transform.name == "egg") {
+			food[3].target.push_back(&transform);
+		}
+		else if (transform.name == "bacon.001") {
+			food[3].target.push_back(&transform);
+		}
+		else if (transform.name == "egg.001") {
+			food[4].position = transform.position;
+			food[4].size = 10.0f;
+			food[4].target.push_back(&transform);
+		}
+		else if (transform.name == "egg.002") {
+			food[4].target.push_back(&transform);
+		}
+		else if (transform.name == "bacon.002") {
+			food[4].target.push_back(&transform);
+		}
 	}
-	if (hip == nullptr) throw std::runtime_error("Hip not found.");
-	if (upper_leg == nullptr) throw std::runtime_error("Upper leg not found.");
-	if (lower_leg == nullptr) throw std::runtime_error("Lower leg not found.");
-
-	hip_base_rotation = hip->rotation;
-	upper_leg_base_rotation = upper_leg->rotation;
-	lower_leg_base_rotation = lower_leg->rotation;
+	
 
 	//get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
@@ -61,13 +115,13 @@ PlayMode::PlayMode() : scene(*hexapod_scene) {
 
 	//start music loop playing:
 	// (note: position will be over-ridden in update())
-	leg_tip_loop = Sound::loop_3D(*dusty_floor_sample, 1.0f, get_leg_tip_position(), 10.0f);
+	leg_tip_loop = Sound::loop_3D(*dusty_floor_sample, 1.0f, glm::vec3(0.0f), 10.0f);
 }
 
 PlayMode::~PlayMode() {
 }
 
-bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
+bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size, SDL_Window *window) {
 
 	if (evt.type == SDL_KEYDOWN) {
 		if (evt.key.keysym.sym == SDLK_ESCAPE) {
@@ -109,17 +163,19 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			SDL_SetRelativeMouseMode(SDL_TRUE);
 			return true;
 		}
+		if (evt.button.button == SDL_BUTTON_LEFT) {
+			tryEating = true;
+		}
 	} else if (evt.type == SDL_MOUSEMOTION) {
 		if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
 			glm::vec2 motion = glm::vec2(
 				evt.motion.xrel / float(window_size.y),
 				-evt.motion.yrel / float(window_size.y)
 			);
-			camera->transform->rotation = glm::normalize(
-				camera->transform->rotation
-				* glm::angleAxis(-motion.x * camera->fovy, glm::vec3(0.0f, 1.0f, 0.0f))
-				* glm::angleAxis(motion.y * camera->fovy, glm::vec3(1.0f, 0.0f, 0.0f))
+			rat->rotation = glm::normalize(
+				rat->rotation * glm::angleAxis(-motion.x * camera->fovy, glm::vec3(0.0f, 1.0f, 0.0f))
 			);
+			SDL_WarpMouseInWindow(window, window_size.x / 2, window_size.y / 2);
 			return true;
 		}
 	}
@@ -129,53 +185,149 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 
 void PlayMode::update(float elapsed) {
 
-	//slowly rotates through [0,1):
-	wobble += elapsed / 10.0f;
-	wobble -= std::floor(wobble);
-
-	hip->rotation = hip_base_rotation * glm::angleAxis(
-		glm::radians(5.0f * std::sin(wobble * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 1.0f, 0.0f)
-	);
-	upper_leg->rotation = upper_leg_base_rotation * glm::angleAxis(
-		glm::radians(7.0f * std::sin(wobble * 2.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-	lower_leg->rotation = lower_leg_base_rotation * glm::angleAxis(
-		glm::radians(10.0f * std::sin(wobble * 3.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-
 	//move sound to follow leg tip position:
-	leg_tip_loop->set_position(get_leg_tip_position(), 1.0f / 60.0f);
+	leg_tip_loop->set_position(glm::vec3(0.0f), 1.0f / 60.0f);
 
-	//move camera:
-	{
+	//move character
+	{	
+		if (target == nullptr) {
+			//combine inputs into a move:
+			constexpr float PlayerSpeed = 30.0f;
+			glm::vec2 move = glm::vec2(0.0f);
+			if (left.pressed && !right.pressed) move.x = -1.0f;
+			if (!left.pressed && right.pressed) move.x = 1.0f;
+			if (down.pressed && !up.pressed) move.y = -1.0f;
+			if (!down.pressed && up.pressed) move.y = 1.0f;
 
-		//combine inputs into a move:
-		constexpr float PlayerSpeed = 30.0f;
-		glm::vec2 move = glm::vec2(0.0f);
-		if (left.pressed && !right.pressed) move.x =-1.0f;
-		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y =-1.0f;
-		if (!down.pressed && up.pressed) move.y = 1.0f;
+			//make it so that moving diagonally doesn't go faster:
+			if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
 
-		//make it so that moving diagonally doesn't go faster:
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
+			glm::mat4x3 frame = rat->make_local_to_parent();
+			glm::vec3 right = -frame[2];
+			glm::vec3 forward = -frame[0];
 
-		glm::mat4x3 frame = camera->transform->make_local_to_parent();
-		glm::vec3 right = frame[0];
-		//glm::vec3 up = frame[1];
-		glm::vec3 forward = -frame[2];
+			rat->position += move.x * right + move.y * forward;
 
-		camera->transform->position += move.x * right + move.y * forward;
+			rat->position.x = glm::clamp(rat->position.x, -table_size.x + rat_size, table_size.x - rat_size);
+			rat->position.y = glm::clamp(rat->position.y, -table_size.y + rat_size, table_size.y - rat_size);
+
+			glm::vec2 rat_pos = glm::vec2(rat->position.x, rat->position.y);
+			if (length(rat_pos) < rat_size + block_size) {
+				rat_pos = glm::normalize(rat_pos) * (rat_size + block_size);
+				rat->position.x = rat_pos.x;
+				rat->position.y = rat_pos.y;
+			}
+		}	
 	}
 
-	{ //update listener to camera position:
+	//update listener to camera position:
+	{ 
 		glm::mat4x3 frame = camera->transform->make_local_to_parent();
 		glm::vec3 right = frame[0];
 		glm::vec3 at = frame[3];
 		Sound::listener.set_position_right(at, right, 1.0f / 60.0f);
+	}
+
+	//eating
+	{
+		//Eating Speed
+		constexpr float EatingSpeed = 20.0f;
+
+		if (target) {
+			target->life -= EatingSpeed * elapsed;
+			//finish eating
+			if (target->life <= 0.0f) {
+				for (auto it = target->target.begin(); it != target->target.end(); ++it) {
+					(*it)->position.z += 100.0f;
+				}
+				numFood--;
+				target = nullptr;
+			}
+
+			//stop eating
+			if (tryEating) {
+				target = nullptr;
+			}
+		}
+		else {
+			//start eating
+			if (tryEating) {
+				for (int i = 0; i < 5; i++) {
+					if (glm::length(rat->position - food[i].position) <= food[i].size && food[i].life > 0.0f) {
+						target = &food[i];
+						break;
+					}
+				}
+			}
+		}
+
+		tryEating = false;
+	}
+
+	//Cat behavior
+	{
+		checkTimer -= elapsed;
+
+		// status change
+		if (checkTimer < 0.0f) {
+			if (checkStatus == 0) {
+				checkTimer = 3.0f;
+			}
+			else if (checkStatus == 1) {
+				checkTimer = 5.0f;
+			}
+			else if (checkStatus == 2) {
+				checkTimer = 3.0f;
+			}
+			else if (checkStatus == 3) {
+				checkTimer = (float)(std::rand() % 5 + 3);
+			}
+			checkStatus = (checkStatus + 1) % 4;
+		}
+
+		constexpr float angleSpeed = 30.0f;
+
+		//circulating
+		if (checkStatus == 0) {
+			angle += angleSpeed * elapsed;
+			if (angle > 360.0f) angle -= 360.0f;
+			cat->position = 60.0f * glm::vec3(glm::sin(glm::radians(angle)), glm::cos(glm::radians(angle)), 0.0f);
+			cat->position.x = glm::clamp(cat->position.x, -40.0f, 40.0f);
+			cat->position.y = glm::clamp(cat->position.y, -30.0f, 30.0f);
+			cat->rotation = glm::angleAxis(-glm::radians(angle), glm::vec3(0.0f, 0.0f, 1.0f));
+		}
+		else if (checkStatus == 1) {
+			cat->position.z = 36.0f - 12.0f * checkTimer;
+		}
+		else if (checkStatus == 2) {
+			glm::vec2 cat_coord = glm::vec2(cat->position.x, cat->position.y);
+			glm::vec2 rat_coord = glm::vec2(rat->position.x, rat->position.y);
+			glm::vec2 direction = cat_coord - rat_coord;
+			float distance = glm::dot(direction, normalize(cat_coord));
+			if (
+				distance < glm::length(cat_coord) ||
+				length(direction - distance * normalize(cat_coord)) > 4.0f
+			) {
+				status = "Being Found You Dead";
+			}
+			else {
+				status = "Hidden";
+			}
+		}
+		else if (checkStatus == 3) {
+			cat->position.z = 12.0f * checkTimer;
+		}
+	}
+
+
+	//Win
+	{
+	
+	}
+
+	//Lose
+	{
+	
 	}
 
 	//reset button press counters:
@@ -222,7 +374,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
 			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
 		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+		lines.draw_text(status,
 			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
 			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
@@ -230,7 +382,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	GL_ERRORS();
 }
 
-glm::vec3 PlayMode::get_leg_tip_position() {
+//glm::vec3 PlayMode::get_leg_tip_position() {
 	//the vertex position here was read from the model in blender:
-	return lower_leg->make_local_to_world() * glm::vec4(-1.26137f, -11.861f, 0.0f, 1.0f);
-}
+//	return lower_leg->make_local_to_world() * glm::vec4(-1.26137f, -11.861f, 0.0f, 1.0f);
+//}

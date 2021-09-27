@@ -12,7 +12,12 @@ How To Play:
 
 (TODO: describe the controls and (if needed) goals/strategy.)
 
-Sources: (TODO: list a source URL for any assets you did not create yourself. Make sure you have a license for the asset.)
+Sources: 
+	BGM https://freepd.com/music/Foam%20Rubber.mp3
+	Cat-Meow https://freesound.org/people/tuberatanka/sounds/110011/download/110011__tuberatanka__cat-meow.wav
+	Eat https://freesound.org/people/omgbong/sounds/411597/download/411597__omgbong__eating-an-apple-01.wav
+	Rat-Death https://freesound.org/people/toefur/sounds/288941/download/288941__toefur__rat-squeak.wav
+	Victory Burp https://freesound.org/people/InspectorJ/sounds/428137/download/428137__inspectorj__burp-male-short-a.wav
 
 This game was built with [NEST](NEST.md).
 

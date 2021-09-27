@@ -60,10 +60,13 @@ struct PlayMode : Mode {
 	int checkStatus = 0;
 	float checkTimer = 5.0f;
 	float angle = 0;
+	float DeathTimer = 0;
+	glm::vec3 CatPosDeath;
 
 
 	//music coming from the tip of the leg (as a demonstration):
-	std::shared_ptr< Sound::PlayingSample > leg_tip_loop;
+	std::shared_ptr< Sound::PlayingSample > bgm_loop;
+	std::shared_ptr< Sound::PlayingSample > eat_loop;
 	
 	//camera:
 	Scene::Camera *camera = nullptr;

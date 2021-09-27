@@ -12,6 +12,8 @@
 
 #include <random>
 
+
+// ---------------- Load Scene ----------------------
 GLuint hexapod_meshes_for_lit_color_texture_program = 0;
 Load< MeshBuffer > hexapod_meshes(LoadTagDefault, []() -> MeshBuffer const * {
 	MeshBuffer const *ret = new MeshBuffer(data_path("hexapod.pnct"));
@@ -60,9 +62,35 @@ Load< Scene > brunch_scene(LoadTagDefault, []() -> Scene const* {
 	});
 });
 
+// ------------------- Load Sound --------------------------
 Load< Sound::Sample > dusty_floor_sample(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("dusty-floor.opus"));
 });
+
+Load< Sound::Sample > bgm_sample(LoadTagDefault, []() -> Sound::Sample const* {
+	return new Sound::Sample(data_path("Foam Rubber.opus"));
+});
+
+Load< Sound::Sample > cat_meow_sample(LoadTagDefault, []() -> Sound::Sample const* {
+	return new Sound::Sample(data_path("Cat-Meow.opus"));
+});
+
+Load< Sound::Sample > cat_attack_sample(LoadTagDefault, []() -> Sound::Sample const* {
+	return new Sound::Sample(data_path("Cat-Attack.opus"));
+});
+
+Load< Sound::Sample > eat_sample(LoadTagDefault, []() -> Sound::Sample const* {
+	return new Sound::Sample(data_path("Eat.opus"));
+});
+
+Load< Sound::Sample > victory_sample(LoadTagDefault, []() -> Sound::Sample const* {
+	return new Sound::Sample(data_path("victory.opus"));
+});
+
+Load< Sound::Sample > rat_death_sample(LoadTagDefault, []() -> Sound::Sample const* {
+	return new Sound::Sample(data_path("Rat-Death.opus"));
+});
+
 
 PlayMode::PlayMode() : scene(*brunch_scene) {
 	//get pointers to leg for convenience:
@@ -114,8 +142,7 @@ PlayMode::PlayMode() : scene(*brunch_scene) {
 	camera = &scene.cameras.front();
 
 	//start music loop playing:
-	// (note: position will be over-ridden in update())
-	leg_tip_loop = Sound::loop_3D(*dusty_floor_sample, 1.0f, glm::vec3(0.0f), 10.0f);
+	bgm_loop = Sound::loop(*bgm_sample, 1.0f, 0.0f);
 }
 
 PlayMode::~PlayMode() {
@@ -185,8 +212,17 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size,
 
 void PlayMode::update(float elapsed) {
 
-	//move sound to follow leg tip position:
-	leg_tip_loop->set_position(glm::vec3(0.0f), 1.0f / 60.0f);
+	if (isCatched) {
+		DeathTimer += elapsed;
+		cat->position = CatPosDeath + (rat->position - CatPosDeath) * std::min(DeathTimer, 1.0f);
+		status = "You Lose";
+		return;
+	}
+
+	if (numFood == 0) {
+		status = "You Win";
+		return;
+	}
 
 	//move character
 	{	
@@ -220,12 +256,11 @@ void PlayMode::update(float elapsed) {
 		}	
 	}
 
-	//update listener to camera position:
+	//update listener to rat position:
 	{ 
-		glm::mat4x3 frame = camera->transform->make_local_to_parent();
-		glm::vec3 right = frame[0];
-		glm::vec3 at = frame[3];
-		Sound::listener.set_position_right(at, right, 1.0f / 60.0f);
+		glm::mat4x3 frame = rat->make_local_to_parent();
+		glm::vec3 right = -frame[2];
+		Sound::listener.set_position_right(rat->position, right, 1.0f / 60.0f);
 	}
 
 	//eating
@@ -241,11 +276,16 @@ void PlayMode::update(float elapsed) {
 					(*it)->position.z += 100.0f;
 				}
 				numFood--;
+				if (numFood == 0) {
+					Sound::play(*victory_sample, 1.0f, 0.0f);
+				}
+				eat_loop->stop();
 				target = nullptr;
 			}
 
 			//stop eating
 			if (tryEating) {
+				eat_loop->stop();
 				target = nullptr;
 			}
 		}
@@ -255,6 +295,7 @@ void PlayMode::update(float elapsed) {
 				for (int i = 0; i < 5; i++) {
 					if (glm::length(rat->position - food[i].position) <= food[i].size && food[i].life > 0.0f) {
 						target = &food[i];
+						eat_loop = Sound::loop(*eat_sample, 1.0f, 0.0f);
 						break;
 					}
 				}
@@ -271,6 +312,7 @@ void PlayMode::update(float elapsed) {
 		// status change
 		if (checkTimer < 0.0f) {
 			if (checkStatus == 0) {
+				Sound::play_3D(*cat_meow_sample, 1.0f, cat->position, 20.0f);
 				checkTimer = 3.0f;
 			}
 			else if (checkStatus == 1) {
@@ -308,26 +350,15 @@ void PlayMode::update(float elapsed) {
 				distance < glm::length(cat_coord) ||
 				length(direction - distance * normalize(cat_coord)) > 4.0f
 			) {
-				status = "Being Found You Dead";
-			}
-			else {
-				status = "Hidden";
+				Sound::play(*cat_attack_sample, 1.0f, 0.0f);
+				Sound::play(*rat_death_sample, 1.0f, 0.0f);
+				CatPosDeath = cat->position;
+				isCatched = true;
 			}
 		}
 		else if (checkStatus == 3) {
 			cat->position.z = 12.0f * checkTimer;
 		}
-	}
-
-
-	//Win
-	{
-	
-	}
-
-	//Lose
-	{
-	
 	}
 
 	//reset button press counters:
@@ -368,16 +399,32 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			0.0f, 0.0f, 0.0f, 1.0f
 		));
 
-		constexpr float H = 0.09f;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
+		
+
+		float H = 0.09f;
+		lines.draw_text("Mouse motion rotates camera; WASD moves; Left-Mouse Click to start/end eat",
 			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
 			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
 		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text(status,
+		lines.draw_text("Mouse motion rotates camera; WASD moves; Left-Mouse Click to start/end eat",
 			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
 			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
 			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+
+		H = 0.4f;
+		if (isCatched || numFood == 0) {
+	
+			lines.draw_text(status,
+				glm::vec3(-aspect * 0.4f + 0.1f * H, 0.1f * H, 0.0),
+				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+				glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+			
+			lines.draw_text(status,
+				glm::vec3(-aspect * 0.4f + 0.1f * H + ofs, 0.1f * H + ofs, 0.0),
+				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+				glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+		}
 	}
 	GL_ERRORS();
 }
